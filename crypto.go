@@ -8,11 +8,11 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-// EncryptForDevice encrypts plaintext and wraps DEK for devicePub.
+// Encrypt encrypts plaintext and wraps DEK for devicePub.
 // aad optionally binds ciphertext to external context.
-func EncryptForDevice(devicePub [keySize]byte, plaintext []byte, aad []byte) (*Record, error) {
+func Encrypt(devicePub [keySize]byte, plaintext []byte, aad []byte) (*Record, error) {
 	dek := make([]byte, keySize)
-	if _, err := randBytes(dek); err != nil {
+	if _, err := randRead(dek); err != nil {
 		return nil, err
 	}
 
@@ -64,8 +64,8 @@ func EncryptForDevice(devicePub [keySize]byte, plaintext []byte, aad []byte) (*R
 	}, nil
 }
 
-// DecryptForDevice unwraps DEK with devicePriv and decrypts payload.
-func DecryptForDevice(devicePriv [keySize]byte, rec *Record, aad []byte) ([]byte, error) {
+// Decrypt unwraps DEK with devicePriv and decrypts payload.
+func Decrypt(devicePriv [keySize]byte, rec *Record, aad []byte) ([]byte, error) {
 	if rec == nil {
 		return nil, fmt.Errorf("%w: nil record", ErrInvalidRecord)
 	}
@@ -140,12 +140,4 @@ func DecryptForDevice(devicePriv [keySize]byte, rec *Record, aad []byte) ([]byte
 	}
 
 	return plain, nil
-}
-
-func randBytes(dst []byte) (int, error) {
-	n, err := randRead(dst)
-	if err != nil {
-		return n, fmt.Errorf("%w: %v", ErrRandomSource, err)
-	}
-	return n, nil
 }

@@ -29,12 +29,12 @@ func main() {
 	}
 
 	aad := []byte("user:42|record:100")
-	rec, err := goseal.EncryptForDevice(kp.Pub, []byte("secret payload"), aad)
+	rec, err := goseal.Encrypt(kp.Pub, []byte("secret payload"), aad)
 	if err != nil {
 		panic(err)
 	}
 
-	plain, err := goseal.DecryptForDevice(kp.Priv, rec, aad)
+	plain, err := goseal.Decrypt(kp.Priv, rec, aad)
 	if err != nil {
 		panic(err)
 	}
