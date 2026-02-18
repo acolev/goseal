@@ -1,4 +1,4 @@
-module goseal
+module github.com/acolev/goseal
 
 go 1.26.0
 
