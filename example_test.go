@@ -25,3 +25,18 @@ func ExampleEncrypt() {
 	fmt.Println(string(plain))
 	// Output: top secret
 }
+
+func ExampleWrapKey() {
+	wrapped, salt, err := goseal.WrapKey("device-dek", "correct horse battery staple")
+	if err != nil {
+		panic(err)
+	}
+
+	unwrapped, err := goseal.UnwrapKey(wrapped, salt, "correct horse battery staple")
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(unwrapped)
+	// Output: device-dek
+}

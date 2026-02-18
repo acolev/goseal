@@ -7,4 +7,8 @@ const (
 	keySize       = 32
 	nonceSize     = chacha20poly1305.NonceSize
 	kekInfoLabel  = "goseal v1 kek"
+
+	wrapSaltSize       = 16
+	wrapPBKDF2Iters    = 600000
+	wrapMinCipherBytes = 12 + 16
 )

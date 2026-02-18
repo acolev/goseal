@@ -7,6 +7,7 @@ var (
 	ErrInvalidRecord            = errors.New("invalid record")
 	ErrUnsupportedRecordVersion = errors.New("unsupported record version")
 	ErrRandomSource             = errors.New("random source failure")
-	ErrKeyUnwrapFailed          = errors.New("cannot unwrap DEK")
+	ErrKeyWrapFailed            = errors.New("cannot wrap key")
+	ErrKeyUnwrapFailed          = errors.New("cannot unwrap key")
 	ErrDataDecryptFailed        = errors.New("cannot decrypt data")
 )
