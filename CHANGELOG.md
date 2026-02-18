@@ -2,7 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.1.2] - 2026-02-18
+### Changed
+- Renamed `EncryptForDevice` to `Encrypt`.
+- Renamed `DecryptForDevice` to `Decrypt`.
+
+## [0.1.1] - 2026-02-18
+### Changed
+- Reverted method names to `EncryptForDevice` and `DecryptForDevice` (from `Seal`/`Open` in v0.1.0).
+
+## [0.1.0] - 2026-02-18
+### Changed
+- **BREAKING**: Changed output format from JSON `Record` struct to compact string token `goseal.v1.<header>.<payload>`.
+- **BREAKING**: Renamed `EncryptForDevice` to `Seal` (returns `string`).
+- **BREAKING**: Renamed `DecryptForDevice` to `Open` (accepts `string`).
+- Removed `Record` struct from public API.
+
+## [0.0.1] - Initial Release
 
 ### Added
 - Split package into multiple files by responsibility.
