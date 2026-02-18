@@ -7,4 +7,5 @@ const (
 	keySize       = 32
 	nonceSize     = chacha20poly1305.NonceSize
 	kekInfoLabel  = "goseal v1 kek"
+	Alg           = "X25519-HKDF-SHA256-ChaCha20Poly1305"
 )

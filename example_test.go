@@ -2,26 +2,28 @@ package goseal_test
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/acolev/goseal"
 )
 
-func ExampleEncryptForDevice() {
+func ExampleSeal() {
 	kp, err := goseal.GenerateKeyPair()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	rec, err := goseal.EncryptForDevice(kp.Pub, []byte("top secret"), []byte("user:42"))
+	aad := []byte("user:42|record:100")
+	token, err := goseal.Seal(kp.Pub, []byte("secret payload"), aad, "key-1", "record-100")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	plain, err := goseal.DecryptForDevice(kp.Priv, rec, []byte("user:42"))
+	plain, err := goseal.Open(kp.Priv, token, aad)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	fmt.Println(string(plain))
-	// Output: top secret
+	// Output: secret payload
 }

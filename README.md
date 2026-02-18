@@ -1,9 +1,10 @@
 # goseal
 
-`goseal` is a Go library for device-bound envelope encryption:
+`goseal` is a Go library for device-bound envelope encryption using a compact token format: `goseal.v1.<header>.<payload>`.
 
 1. Random DEK encrypts payload with ChaCha20-Poly1305.
 2. DEK is wrapped for target device public key via ephemeral X25519 + HKDF + ChaCha20-Poly1305.
+3. Output is a URL-safe string token.
 
 ## Install
 
@@ -18,36 +19,61 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/acolev/goseal"
 )
 
 func main() {
+	// 1. Generate device keys (persist securely!)
 	kp, err := goseal.GenerateKeyPair()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
+	// 2. Encrypt (Seal)
+	// You need: Recipient Public Key, Plaintext, Context (AAD), KeyID, AAD Hint (optional)
 	aad := []byte("user:42|record:100")
-	rec, err := goseal.EncryptForDevice(kp.Pub, []byte("secret payload"), aad)
+	token, err := goseal.Seal(kp.Pub, []byte("secret payload"), aad, "key-1", "record-100")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	plain, err := goseal.DecryptForDevice(kp.Priv, rec, aad)
+	fmt.Printf("Token: %s\n", token)
+
+	// 3. Decrypt (Open)
+    // You need: Recipient Private Key, Token, Context (AAD)
+	plain, err := goseal.Open(kp.Priv, token, aad)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	fmt.Println(string(plain))
 }
 ```
 
-## API stability
+## Token Format
 
-- Record format version is currently `v=1`.
-- Backward-incompatible changes must bump major version.
-- New record versions should keep older versions decryptable until deprecation is announced.
+`goseal.v1.<header_b64url>.<payload_b64url>`
+
+### Header
+Base64URL encoded JSON:
+```json
+{
+  "v": 1,
+  "alg": "X25519-HKDF-SHA256-ChaCha20Poly1305",
+  "kid": "given-key-id",
+  "aad_hint": "optional-hint"
+}
+```
+
+### Payload
+Base64URL encoded binary concatenation of:
+- `epk` (32 bytes): Ephemeral X25519 Public Key
+- `ndek` (12 bytes): Nonce for DEK wrapping
+- `wdek` (48 bytes): Wrapped DEK (Encrypted Key)
+- `ndata` (12 bytes): Nonce for Data encryption
+- `ct` (variable): Encrypted Data
 
 ## Security notes
 

@@ -18,14 +18,14 @@ func FuzzEncryptDecryptRoundTrip(f *testing.F) {
 	f.Add([]byte{0x00, 0x01, 0x02}, []byte("ctx"))
 
 	f.Fuzz(func(t *testing.T, plaintext []byte, aad []byte) {
-		rec, err := EncryptForDevice(kp.Pub, plaintext, aad)
+		token, err := Seal(kp.Pub, plaintext, aad, "fuzz-kid", "")
 		if err != nil {
-			t.Fatalf("EncryptForDevice: %v", err)
+			t.Fatalf("Seal: %v", err)
 		}
 
-		got, err := DecryptForDevice(kp.Priv, rec, aad)
+		got, err := Open(kp.Priv, token, aad)
 		if err != nil {
-			t.Fatalf("DecryptForDevice: %v", err)
+			t.Fatalf("Open: %v", err)
 		}
 		if !bytes.Equal(got, plaintext) {
 			t.Fatalf("plaintext mismatch")

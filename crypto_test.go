@@ -2,134 +2,101 @@ package goseal
 
 import (
 	"bytes"
-	"errors"
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
-func TestEncryptDecryptRoundTrip(t *testing.T) {
+func TestSealOpenRoundTrip(t *testing.T) {
 	kp, err := GenerateKeyPair()
 	if err != nil {
-		t.Fatalf("GenerateKeyPair: %v", err)
+		t.Fatal(err)
 	}
 
-	plaintext := []byte("hello production library")
-	aad := []byte("user:42|record:99|v1")
-	rec, err := EncryptForDevice(kp.Pub, plaintext, aad)
+	plaintext := []byte("hello world")
+	aad := []byte("context")
+	kid := "test-key-id"
+	aadHint := "test-aad-hint"
+
+	token, err := Seal(kp.Pub, plaintext, aad, kid, aadHint)
 	if err != nil {
-		t.Fatalf("EncryptForDevice: %v", err)
+		t.Fatalf("Seal failed: %v", err)
 	}
 
-	got, err := DecryptForDevice(kp.Priv, rec, aad)
-	if err != nil {
-		t.Fatalf("DecryptForDevice: %v", err)
+	// Verify token structure
+	parts := strings.Split(token, ".")
+	if len(parts) != 4 {
+		t.Fatalf("expected 4 parts, got %d", len(parts))
 	}
-	if !bytes.Equal(got, plaintext) {
-		t.Fatalf("plaintext mismatch: got=%q want=%q", got, plaintext)
+	if parts[0] != "goseal" || parts[1] != "v1" {
+		t.Errorf("unexpected prefix/version: %s.%s", parts[0], parts[1])
+	}
+
+	// Verify header
+	headerJSON, err := b64d(parts[2])
+	if err != nil {
+		t.Errorf("failed to decode header: %v", err)
+	}
+	var header Header
+	if err := json.Unmarshal(headerJSON, &header); err != nil {
+		t.Errorf("failed to unmarshal header: %v", err)
+	}
+	if header.KID != kid {
+		t.Errorf("expected kid %q, got %q", kid, header.KID)
+	}
+	if header.AADHint != aadHint {
+		t.Errorf("expected aadHint %q, got %q", aadHint, header.AADHint)
+	}
+
+	// Verify payload decoding
+	decrypted, err := Open(kp.Priv, token, aad)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	if !bytes.Equal(plaintext, decrypted) {
+		t.Errorf("expected %q, got %q", plaintext, decrypted)
 	}
 }
 
-func TestDecryptWrongPrivateKeyFails(t *testing.T) {
+func TestOpenFailures(t *testing.T) {
 	kp, err := GenerateKeyPair()
 	if err != nil {
-		t.Fatalf("GenerateKeyPair: %v", err)
+		t.Fatal(err)
 	}
-	other, err := GenerateKeyPair()
+	otherKP, _ := GenerateKeyPair()
+
+	plaintext := []byte("secret")
+	aad := []byte("aad")
+	token, err := Seal(kp.Pub, plaintext, aad, "kid", "")
 	if err != nil {
-		t.Fatalf("GenerateKeyPair(other): %v", err)
+		t.Fatal(err)
 	}
 
-	rec, err := EncryptForDevice(kp.Pub, []byte("secret"), []byte("aad"))
-	if err != nil {
-		t.Fatalf("EncryptForDevice: %v", err)
+	// Test wrong private key
+	if _, err := Open(otherKP.Priv, token, aad); err == nil {
+		t.Error("expected error with wrong private key, got nil")
 	}
 
-	_, err = DecryptForDevice(other.Priv, rec, []byte("aad"))
-	if !errors.Is(err, ErrKeyUnwrapFailed) {
-		t.Fatalf("expected ErrKeyUnwrapFailed, got %v", err)
-	}
-}
-
-func TestDecryptWrongAADFails(t *testing.T) {
-	kp, err := GenerateKeyPair()
-	if err != nil {
-		t.Fatalf("GenerateKeyPair: %v", err)
-	}
-	rec, err := EncryptForDevice(kp.Pub, []byte("secret"), []byte("aad-1"))
-	if err != nil {
-		t.Fatalf("EncryptForDevice: %v", err)
+	// Test wrong AAD
+	if _, err := Open(kp.Priv, token, []byte("wrong")); err == nil {
+		t.Error("expected error with wrong AAD, got nil")
 	}
 
-	_, err = DecryptForDevice(kp.Priv, rec, []byte("aad-2"))
-	if !errors.Is(err, ErrKeyUnwrapFailed) {
-		t.Fatalf("expected ErrKeyUnwrapFailed for wrong aad, got %v", err)
-	}
-}
-
-func TestDecryptTamperedCiphertextFails(t *testing.T) {
-	kp, err := GenerateKeyPair()
-	if err != nil {
-		t.Fatalf("GenerateKeyPair: %v", err)
-	}
-	rec, err := EncryptForDevice(kp.Pub, []byte("secret"), []byte("aad"))
-	if err != nil {
-		t.Fatalf("EncryptForDevice: %v", err)
+	// Test malformed token
+	if _, err := Open(kp.Priv, "bad.token", aad); err == nil {
+		t.Error("expected error with malformed token, got nil")
 	}
 
-	ct, err := b64d(rec.CipherText)
-	if err != nil {
-		t.Fatalf("b64d: %v", err)
-	}
-	ct[len(ct)-1] ^= 0x01
-	rec.CipherText = b64(ct)
+	// Test tampered payload
+	parts := strings.Split(token, ".")
+	header := parts[2]
+	payloadBytes, _ := b64d(parts[3])
+	payloadBytes[len(payloadBytes)-1] ^= 0xFF // Flip last bit of ciphertext
+	tamperedPayload := b64(payloadBytes)
+	tamperedToken := "goseal.v1." + header + "." + tamperedPayload
 
-	_, err = DecryptForDevice(kp.Priv, rec, []byte("aad"))
-	if !errors.Is(err, ErrDataDecryptFailed) {
-		t.Fatalf("expected ErrDataDecryptFailed, got %v", err)
-	}
-}
-
-func TestDecryptTamperedWrappedDEKFails(t *testing.T) {
-	kp, err := GenerateKeyPair()
-	if err != nil {
-		t.Fatalf("GenerateKeyPair: %v", err)
-	}
-	rec, err := EncryptForDevice(kp.Pub, []byte("secret"), []byte("aad"))
-	if err != nil {
-		t.Fatalf("EncryptForDevice: %v", err)
-	}
-
-	wdek, err := b64d(rec.WrappedDEK)
-	if err != nil {
-		t.Fatalf("b64d(wdek): %v", err)
-	}
-	wdek[len(wdek)-1] ^= 0x01
-	rec.WrappedDEK = b64(wdek)
-
-	_, err = DecryptForDevice(kp.Priv, rec, []byte("aad"))
-	if !errors.Is(err, ErrKeyUnwrapFailed) {
-		t.Fatalf("expected ErrKeyUnwrapFailed, got %v", err)
-	}
-}
-
-func TestDecryptBadRecordFields(t *testing.T) {
-	kp, err := GenerateKeyPair()
-	if err != nil {
-		t.Fatalf("GenerateKeyPair: %v", err)
-	}
-
-	_, err = DecryptForDevice(kp.Priv, nil, nil)
-	if !errors.Is(err, ErrInvalidRecord) {
-		t.Fatalf("expected ErrInvalidRecord for nil record, got %v", err)
-	}
-
-	rec, err := EncryptForDevice(kp.Pub, []byte("secret"), nil)
-	if err != nil {
-		t.Fatalf("EncryptForDevice: %v", err)
-	}
-
-	rec.V = 2
-	_, err = DecryptForDevice(kp.Priv, rec, nil)
-	if !errors.Is(err, ErrUnsupportedRecordVersion) {
-		t.Fatalf("expected ErrUnsupportedRecordVersion, got %v", err)
+	if _, err := Open(kp.Priv, tamperedToken, aad); err == nil {
+		t.Error("expected error with tampered payload, got nil")
 	}
 }

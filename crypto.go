@@ -1,102 +1,146 @@
 package goseal
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 )
 
-// EncryptForDevice encrypts plaintext and wraps DEK for devicePub.
-// aad optionally binds ciphertext to external context.
-func EncryptForDevice(devicePub [keySize]byte, plaintext []byte, aad []byte) (*Record, error) {
+// Seal encrypts plaintext and wraps DEK for devicePub.
+// It returns a token string in the format: goseal.v1.<header>.<payload>
+func Seal(devicePub [keySize]byte, plaintext, aad []byte, kid string, aadHint string) (string, error) {
 	dek := make([]byte, keySize)
 	if _, err := randBytes(dek); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	aeadData, err := chacha20poly1305.New(dek)
 	if err != nil {
-		return nil, fmt.Errorf("aead data: %w", err)
+		return "", fmt.Errorf("aead data: %w", err)
 	}
 	nonceData, err := randNonce()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	cipherText := aeadData.Seal(nil, nonceData, plaintext, aad)
 
 	epk, epriv, err := genEphemeral()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	shared, err := curve25519.X25519(epriv[:], devicePub[:])
 	if err != nil {
-		return nil, fmt.Errorf("ecdh: %w", err)
+		return "", fmt.Errorf("ecdh: %w", err)
 	}
 	if isAllZero(shared) {
-		return nil, fmt.Errorf("%w: bad shared secret", ErrInvalidKey)
+		return "", fmt.Errorf("%w: bad shared secret", ErrInvalidKey)
 	}
 
 	kek, err := deriveKEK(shared, epk[:], devicePub[:], aad)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	aeadKEK, err := chacha20poly1305.New(kek)
 	if err != nil {
-		return nil, fmt.Errorf("aead kek: %w", err)
+		return "", fmt.Errorf("aead kek: %w", err)
 	}
 	nonceDEK, err := randNonce()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	wrappedDEK := aeadKEK.Seal(nil, nonceDEK, dek, aad)
 
-	return &Record{
-		V:            recordVersion,
-		EphemeralPub: b64(epk[:]),
-		NonceDEK:     b64(nonceDEK),
-		WrappedDEK:   b64(wrappedDEK),
-		NonceData:    b64(nonceData),
-		CipherText:   b64(cipherText),
-	}, nil
+	// Build Token
+	header := Header{
+		V:       recordVersion,
+		Alg:     Alg,
+		KID:     kid,
+		AADHint: aadHint,
+	}
+	headerJSON, err := json.Marshal(header)
+	if err != nil {
+		return "", fmt.Errorf("header marshal: %w", err)
+	}
+
+	// Payload: epk(32) + ndek(12) + wdek(var) + ndata(12) + ct(var)
+	var payload bytes.Buffer
+	payload.Grow(len(epk) + len(nonceDEK) + len(wrappedDEK) + len(nonceData) + len(cipherText))
+	payload.Write(epk[:])
+	payload.Write(nonceDEK)
+	payload.Write(wrappedDEK)
+	payload.Write(nonceData)
+	payload.Write(cipherText)
+
+	return fmt.Sprintf("goseal.v%d.%s.%s", recordVersion, b64(headerJSON), b64(payload.Bytes())), nil
 }
 
-// DecryptForDevice unwraps DEK with devicePriv and decrypts payload.
-func DecryptForDevice(devicePriv [keySize]byte, rec *Record, aad []byte) ([]byte, error) {
-	if rec == nil {
-		return nil, fmt.Errorf("%w: nil record", ErrInvalidRecord)
+// Open unwraps DEK with devicePriv and decrypts payload from the token.
+func Open(devicePriv [keySize]byte, token string, aad []byte) ([]byte, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 4 {
+		return nil, fmt.Errorf("%w: malformed token", ErrInvalidToken)
 	}
-	if rec.V != recordVersion {
-		return nil, fmt.Errorf("%w: %d", ErrUnsupportedRecordVersion, rec.V)
+	if parts[0] != "goseal" {
+		return nil, fmt.Errorf("%w: invalid prefix", ErrInvalidToken)
+	}
+	if parts[1] != fmt.Sprintf("v%d", recordVersion) {
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedRecordVersion, parts[1])
 	}
 
-	epkBytes, err := b64d(rec.EphemeralPub)
-	if err != nil || len(epkBytes) != keySize {
-		return nil, fmt.Errorf("%w: bad epk", ErrInvalidRecord)
+	// Decode Header
+	headerJSON, err := b64d(parts[2])
+	if err != nil {
+		return nil, fmt.Errorf("%w: bad header encoding", ErrInvalidToken)
 	}
+	var header Header
+	if err := json.Unmarshal(headerJSON, &header); err != nil {
+		return nil, fmt.Errorf("%w: bad header json", ErrInvalidToken)
+	}
+	if header.V != recordVersion {
+		return nil, fmt.Errorf("%w: version mismatch in header", ErrUnsupportedRecordVersion)
+	}
+	if header.Alg != Alg {
+		return nil, fmt.Errorf("%w: unsupported alg", ErrInvalidToken)
+	}
+
+	// Decode Payload
+	payload, err := b64d(parts[3])
+	if err != nil {
+		return nil, fmt.Errorf("%w: bad payload encoding", ErrInvalidToken)
+	}
+
+	// Payload struct: epk(32) + ndek(12) + wdek(48) + ndata(12) + ct(var)
+	minLen := keySize + nonceSize + (keySize + chacha20poly1305.Overhead) + nonceSize
+	if len(payload) < minLen {
+		return nil, fmt.Errorf("%w: payload too short", ErrInvalidToken)
+	}
+
+	offset := 0
+
+	epkBytes := payload[offset : offset+keySize]
+	offset += keySize
+
+	nonceDEK := payload[offset : offset+nonceSize]
+	offset += nonceSize
+
+	wdekLen := keySize + chacha20poly1305.Overhead
+	wrappedDEK := payload[offset : offset+wdekLen]
+	offset += wdekLen
+
+	nonceData := payload[offset : offset+nonceSize]
+	offset += nonceSize
+
+	cipherText := payload[offset:]
+
 	var epk [keySize]byte
 	copy(epk[:], epkBytes)
-
-	nonceDEK, err := b64d(rec.NonceDEK)
-	if err != nil || len(nonceDEK) != nonceSize {
-		return nil, fmt.Errorf("%w: bad nonceDEK", ErrInvalidRecord)
-	}
-	wrappedDEK, err := b64d(rec.WrappedDEK)
-	if err != nil {
-		return nil, fmt.Errorf("%w: bad wrappedDEK", ErrInvalidRecord)
-	}
-
-	nonceData, err := b64d(rec.NonceData)
-	if err != nil || len(nonceData) != nonceSize {
-		return nil, fmt.Errorf("%w: bad nonceData", ErrInvalidRecord)
-	}
-	cipherText, err := b64d(rec.CipherText)
-	if err != nil {
-		return nil, fmt.Errorf("%w: bad ciphertext", ErrInvalidRecord)
-	}
 
 	scalar := devicePriv
 	clampScalar(&scalar)
@@ -127,7 +171,7 @@ func DecryptForDevice(devicePriv [keySize]byte, rec *Record, aad []byte) ([]byte
 		return nil, errors.Join(ErrKeyUnwrapFailed, err)
 	}
 	if len(dek) != keySize {
-		return nil, fmt.Errorf("%w: bad DEK length", ErrInvalidRecord)
+		return nil, fmt.Errorf("%w: bad DEK length", ErrInvalidToken)
 	}
 
 	aeadData, err := chacha20poly1305.New(dek)
@@ -140,12 +184,4 @@ func DecryptForDevice(devicePriv [keySize]byte, rec *Record, aad []byte) ([]byte
 	}
 
 	return plain, nil
-}
-
-func randBytes(dst []byte) (int, error) {
-	n, err := randRead(dst)
-	if err != nil {
-		return n, fmt.Errorf("%w: %v", ErrRandomSource, err)
-	}
-	return n, nil
 }

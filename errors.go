@@ -4,7 +4,7 @@ import "errors"
 
 var (
 	ErrInvalidKey               = errors.New("invalid key")
-	ErrInvalidRecord            = errors.New("invalid record")
+	ErrInvalidToken             = errors.New("invalid token")
 	ErrUnsupportedRecordVersion = errors.New("unsupported record version")
 	ErrRandomSource             = errors.New("random source failure")
 	ErrKeyUnwrapFailed          = errors.New("cannot unwrap DEK")

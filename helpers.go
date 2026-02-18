@@ -57,3 +57,11 @@ func b64(b []byte) string {
 func b64d(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(s)
 }
+
+func randBytes(dst []byte) (int, error) {
+	n, err := randRead(dst)
+	if err != nil {
+		return n, fmt.Errorf("%w: %v", ErrRandomSource, err)
+	}
+	return n, nil
+}
