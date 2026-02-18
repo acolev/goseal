@@ -11,9 +11,9 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-// EncryptForDevice encrypts plaintext and wraps DEK for devicePub.
+// Encrypt encrypts plaintext and wraps DEK for devicePub.
 // It returns a token string in the format: goseal.v1.<header>.<payload>
-func EncryptForDevice(devicePub [keySize]byte, plaintext, aad []byte, kid string, aadHint string) (string, error) {
+func Encrypt(devicePub [keySize]byte, plaintext, aad []byte, kid string, aadHint string) (string, error) {
 	dek := make([]byte, keySize)
 	if _, err := randBytes(dek); err != nil {
 		return "", err
@@ -81,8 +81,8 @@ func EncryptForDevice(devicePub [keySize]byte, plaintext, aad []byte, kid string
 	return fmt.Sprintf("goseal.v%d.%s.%s", recordVersion, b64(headerJSON), b64(payload.Bytes())), nil
 }
 
-// DecryptForDevice unwraps DEK with devicePriv and decrypts payload from the token.
-func DecryptForDevice(devicePriv [keySize]byte, token string, aad []byte) ([]byte, error) {
+// Decrypt unwraps DEK with devicePriv and decrypts payload from the token.
+func Decrypt(devicePriv [keySize]byte, token string, aad []byte) ([]byte, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 4 {
 		return nil, fmt.Errorf("%w: malformed token", ErrInvalidToken)
