@@ -84,6 +84,21 @@ func main() {
 - Reject decryption on any integrity failure and do not retry with relaxed validation.
 - For `WrapKey`/`UnwrapKey`, use strong passwords and store returned salt alongside wrapped key.
 
+## Security disclaimer
+
+This project is provided **as-is**, without warranty of any kind.
+Cryptography is easy to misuse. You are responsible for reviewing the code,
+understanding the threat model, and deciding whether it fits your use case.
+The author(s) assume no liability for data loss, compromise, or damages
+resulting from use of this software.
+
+## Threat model (high level)
+
+`goseal` is intended to protect data **at rest** (for example, database or object storage leaks)
+when private keys remain secret.
+It does **not** protect against compromise of private keys or passwords, or against an attacker
+who already has both ciphertext and the required keys.
+
 ## Development
 
 ```bash
