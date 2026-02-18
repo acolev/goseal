@@ -1,7 +1,6 @@
 package goseal
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,16 +68,20 @@ func Encrypt(devicePub [keySize]byte, plaintext, aad []byte, kid string, aadHint
 		return "", fmt.Errorf("header marshal: %w", err)
 	}
 
-	// Payload: epk(32) + ndek(12) + wdek(var) + ndata(12) + ct(var)
-	var payload bytes.Buffer
-	payload.Grow(len(epk) + len(nonceDEK) + len(wrappedDEK) + len(nonceData) + len(cipherText))
-	payload.Write(epk[:])
-	payload.Write(nonceDEK)
-	payload.Write(wrappedDEK)
-	payload.Write(nonceData)
-	payload.Write(cipherText)
+	// Payload
+	p := payload{
+		EPK:        b64(epk[:]),
+		NonceDEK:   b64(nonceDEK),
+		WrappedDEK: b64(wrappedDEK),
+		NonceData:  b64(nonceData),
+		CipherText: b64(cipherText),
+	}
+	payloadJSON, err := json.Marshal(p)
+	if err != nil {
+		return "", fmt.Errorf("payload marshal: %w", err)
+	}
 
-	return fmt.Sprintf("goseal.v%d.%s.%s", recordVersion, b64(headerJSON), b64(payload.Bytes())), nil
+	return fmt.Sprintf("goseal.v%d.%s.%s", recordVersion, b64(headerJSON), b64(payloadJSON)), nil
 }
 
 // Decrypt unwraps DEK with devicePriv and decrypts payload from the token.
@@ -111,33 +114,39 @@ func Decrypt(devicePriv [keySize]byte, token string, aad []byte) ([]byte, error)
 	}
 
 	// Decode Payload
-	payload, err := b64d(parts[3])
+	payloadJSON, err := b64d(parts[3])
 	if err != nil {
 		return nil, fmt.Errorf("%w: bad payload encoding", ErrInvalidToken)
 	}
-
-	// Payload struct: epk(32) + ndek(12) + wdek(48) + ndata(12) + ct(var)
-	minLen := keySize + nonceSize + (keySize + chacha20poly1305.Overhead) + nonceSize
-	if len(payload) < minLen {
-		return nil, fmt.Errorf("%w: payload too short", ErrInvalidToken)
+	var p payload
+	if err := json.Unmarshal(payloadJSON, &p); err != nil {
+		return nil, fmt.Errorf("%w: bad payload json", ErrInvalidToken)
 	}
 
-	offset := 0
+	epkBytes, err := b64d(p.EPK)
+	if err != nil || len(epkBytes) != keySize {
+		return nil, fmt.Errorf("%w: bad epk", ErrInvalidToken)
+	}
 
-	epkBytes := payload[offset : offset+keySize]
-	offset += keySize
+	nonceDEK, err := b64d(p.NonceDEK)
+	if err != nil || len(nonceDEK) != nonceSize {
+		return nil, fmt.Errorf("%w: bad nonceDEK", ErrInvalidToken)
+	}
 
-	nonceDEK := payload[offset : offset+nonceSize]
-	offset += nonceSize
+	wrappedDEK, err := b64d(p.WrappedDEK)
+	if err != nil {
+		return nil, fmt.Errorf("%w: bad wrappedDEK", ErrInvalidToken)
+	}
 
-	wdekLen := keySize + chacha20poly1305.Overhead
-	wrappedDEK := payload[offset : offset+wdekLen]
-	offset += wdekLen
+	nonceData, err := b64d(p.NonceData)
+	if err != nil || len(nonceData) != nonceSize {
+		return nil, fmt.Errorf("%w: bad nonceData", ErrInvalidToken)
+	}
 
-	nonceData := payload[offset : offset+nonceSize]
-	offset += nonceSize
-
-	cipherText := payload[offset:]
+	cipherText, err := b64d(p.CipherText)
+	if err != nil {
+		return nil, fmt.Errorf("%w: bad ciphertext", ErrInvalidToken)
+	}
 
 	var epk [keySize]byte
 	copy(epk[:], epkBytes)

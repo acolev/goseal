@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2026-02-18
+### Changed
+- Changed `Payload` format from binary concatenation to JSON object (Base64URL encoded).
+- This restores readability of the internal structure while keeping the 3-part token format.
+
 ## [0.1.2] - 2026-02-18
 ### Changed
 - Renamed `EncryptForDevice` to `Encrypt`.

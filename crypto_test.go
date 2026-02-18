@@ -91,10 +91,11 @@ func TestOpenFailures(t *testing.T) {
 	// Test tampered payload
 	parts := strings.Split(token, ".")
 	header := parts[2]
-	payloadBytes, _ := b64d(parts[3])
-	payloadBytes[len(payloadBytes)-1] ^= 0xFF // Flip last bit of ciphertext
-	tamperedPayload := b64(payloadBytes)
-	tamperedToken := "goseal.v1." + header + "." + tamperedPayload
+
+	payloadJSON, _ := b64d(parts[3])
+	// We need to tamper with the inner base64 strings in the JSON, or just break the JSON structure
+	tamperedPayloadJSON := bytes.Replace(payloadJSON, []byte("{"), []byte("}"), 1)
+	tamperedToken := "goseal.v1." + header + "." + b64(tamperedPayloadJSON)
 
 	if _, err := Decrypt(kp.Priv, tamperedToken, aad); err == nil {
 		t.Error("expected error with tampered payload, got nil")

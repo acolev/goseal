@@ -68,12 +68,16 @@ Base64URL encoded JSON:
 ```
 
 ### Payload
-Base64URL encoded binary concatenation of:
-- `epk` (32 bytes): Ephemeral X25519 Public Key
-- `ndek` (12 bytes): Nonce for DEK wrapping
-- `wdek` (48 bytes): Wrapped DEK (Encrypted Key)
-- `ndata` (12 bytes): Nonce for Data encryption
-- `ct` (variable): Encrypted Data
+Base64URL encoded JSON:
+```json
+{
+  "epk": "...",   // Base64Url encoded 32 bytes
+  "ndek": "...",  // Base64Url encoded 12 bytes
+  "wdek": "...",  // Base64Url encoded variable bytes (wrapped DEK)
+  "ndata": "...", // Base64Url encoded 12 bytes
+  "ct": "..."     // Base64Url encoded variable bytes (ciphertext)
+}
+```
 
 ## Security notes
 
