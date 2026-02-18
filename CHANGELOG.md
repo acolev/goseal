@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2026-02-18
+### Added
+- Added `WrapKey(sourceKey, password)` for password-based key wrapping.
+- Added `UnwrapKey(wrappedKeyB64, saltB64, password)` for key unwrapping.
+- Added `ExampleWrapKey` usage example.
+- Added unit tests for wrap/unwrap round-trip, wrong password, and invalid input.
+
+### Changed
+- Added `ErrKeyWrapFailed`.
+- Generalized `ErrKeyUnwrapFailed` message from "cannot unwrap DEK" to "cannot unwrap key".
+- Updated README with password-based wrapping section and example.
+
 ## [0.1.5] - 2026-02-18
 ### Changed
 - Renamed `EncryptForDevice` to `Encrypt`.
