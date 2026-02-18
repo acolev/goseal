@@ -31,19 +31,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// 2. Encrypt (Seal)
+	// 2. Encrypt (EncryptForDevice)
 	// You need: Recipient Public Key, Plaintext, Context (AAD), KeyID, AAD Hint (optional)
 	aad := []byte("user:42|record:100")
-	token, err := goseal.Seal(kp.Pub, []byte("secret payload"), aad, "key-1", "record-100")
+	token, err := goseal.EncryptForDevice(kp.Pub, []byte("secret payload"), aad, "key-1", "record-100")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Printf("Token: %s\n", token)
 
-	// 3. Decrypt (Open)
+	// 3. Decrypt (DecryptForDevice)
     // You need: Recipient Private Key, Token, Context (AAD)
-	plain, err := goseal.Open(kp.Priv, token, aad)
+	plain, err := goseal.DecryptForDevice(kp.Priv, token, aad)
 	if err != nil {
 		log.Fatal(err)
 	}
