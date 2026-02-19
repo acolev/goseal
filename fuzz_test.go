@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func FuzzEncryptDecryptRoundTrip(f *testing.F) {
+func FuzzSealOpenRoundTrip(f *testing.F) {
 	kp, err := GenerateKeyPair()
 	if err != nil {
 		f.Fatalf("GenerateKeyPair: %v", err)
@@ -18,14 +18,14 @@ func FuzzEncryptDecryptRoundTrip(f *testing.F) {
 	f.Add([]byte{0x00, 0x01, 0x02}, []byte("ctx"))
 
 	f.Fuzz(func(t *testing.T, plaintext []byte, aad []byte) {
-		rec, err := Encrypt(kp.Pub, plaintext, aad)
+		rec, err := Seal(kp.Pub, plaintext, aad)
 		if err != nil {
-			t.Fatalf("Encrypt: %v", err)
+			t.Fatalf("Seal: %v", err)
 		}
 
-		got, err := Decrypt(kp.Priv, rec, aad)
+		got, err := Open(kp.Priv, rec, aad)
 		if err != nil {
-			t.Fatalf("Decrypt: %v", err)
+			t.Fatalf("Open: %v", err)
 		}
 		if !bytes.Equal(got, plaintext) {
 			t.Fatalf("plaintext mismatch")

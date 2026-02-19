@@ -6,18 +6,18 @@ import (
 	"github.com/acolev/goseal"
 )
 
-func ExampleEncrypt() {
+func ExampleSeal() {
 	kp, err := goseal.GenerateKeyPair()
 	if err != nil {
 		panic(err)
 	}
 
-	rec, err := goseal.Encrypt(kp.Pub, []byte("top secret"), []byte("user:42"))
+	rec, err := goseal.Seal(kp.Pub, []byte("top secret"), []byte("user:42"))
 	if err != nil {
 		panic(err)
 	}
 
-	plain, err := goseal.Decrypt(kp.Priv, rec, []byte("user:42"))
+	plain, err := goseal.Open(kp.Priv, rec, []byte("user:42"))
 	if err != nil {
 		panic(err)
 	}
@@ -26,13 +26,13 @@ func ExampleEncrypt() {
 	// Output: top secret
 }
 
-func ExampleWrapKey() {
-	wrapped, salt, err := goseal.WrapKey("device-dek", "correct horse battery staple")
+func ExampleProtectPrivateKey() {
+	wrapped, salt, err := goseal.ProtectPrivateKey("device-dek", "correct horse battery staple")
 	if err != nil {
 		panic(err)
 	}
 
-	unwrapped, err := goseal.UnwrapKey(wrapped, salt, "correct horse battery staple")
+	unwrapped, err := goseal.UnprotectPrivateKey(wrapped, salt, "correct horse battery staple")
 	if err != nil {
 		panic(err)
 	}

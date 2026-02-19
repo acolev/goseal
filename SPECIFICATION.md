@@ -4,10 +4,10 @@ This document defines cross-language interoperability requirements for `goseal`.
 
 Covered APIs:
 - `GenerateKeyPair()`
-- `Encrypt(devicePub, plaintext, aad)`
-- `Decrypt(devicePriv, record, aad)`
-- `WrapKey(sourceKey, password)`
-- `UnwrapKey(wrappedKeyB64, saltB64, password)`
+- `Seal(devicePub, plaintext, aad)`
+- `Open(devicePriv, record, aad)`
+- `ProtectPrivateKey(sourceKey, password)`
+- `UnprotectPrivateKey(wrappedKeyB64, saltB64, password)`
 
 ## Versioning
 
@@ -49,7 +49,7 @@ Password-wrap constants:
 - `pub = X25519(priv, basepoint)`
 4. Return `{priv, pub}`.
 
-## Envelope record format (`Encrypt` output)
+## Envelope record format (`Seal` output)
 
 JSON object fields:
 - `v` (int): record version, must be `1`
@@ -72,7 +72,7 @@ Example shape:
 }
 ```
 
-## Encrypt algorithm (`Encrypt`)
+## Seal algorithm (`Seal`)
 
 Inputs:
 - `devicePub`: recipient X25519 public key (32 bytes)
@@ -81,7 +81,7 @@ Inputs:
 
 Steps:
 1. Generate random `dek` (32 bytes).
-2. Encrypt payload:
+2. Seal payload:
 - `aeadData = ChaCha20Poly1305(dek)`
 - `nonceData = random(12)`
 - `ct = AEAD_Seal(aeadData, nonceData, plaintext, aad)`
@@ -102,12 +102,12 @@ Steps:
 - `wdek = AEAD_Seal(aeadKEK, nonceDEK, dek, aad)`
 7. Serialize as record fields using base64url-no-padding.
 
-## Decrypt algorithm (`Decrypt`)
+## Open algorithm (`Open`)
 
 Inputs:
 - `devicePriv`: recipient X25519 private scalar (32 bytes; implementation clamps before use)
 - `record`: JSON structure described above
-- `aad`: bytes (must match exactly what was used in `Encrypt`)
+- `aad`: bytes (must match exactly what was used in `Seal`)
 
 Steps:
 1. Validate record:
@@ -125,30 +125,30 @@ Steps:
 - reject if all-zero
 5. Derive `kek` with the same HKDF construction:
 - `salt = epk || devicePub`
-- `info` construction exactly as in Encrypt, including AAD behavior
+- `info` construction exactly as in Seal, including AAD behavior
 6. Unwrap DEK:
 - `dek = AEAD_Open(ChaCha20Poly1305(kek), nonceDEK, wdek, aad)`
 - fail if authentication fails
 - require `len(dek) == 32`
-7. Decrypt payload:
+7. Open payload:
 - `plaintext = AEAD_Open(ChaCha20Poly1305(dek), nonceData, ct, aad)`
 - fail if authentication fails
 8. Return plaintext bytes.
 
-## Password-based key wrapping (`WrapKey`/`UnwrapKey`)
+## Password-based key wrapping (`ProtectPrivateKey`/`UnprotectPrivateKey`)
 
 ### Input encoding
 
 - `sourceKey` is UTF-8 string; plaintext bytes are raw UTF-8 bytes.
 - `password` is UTF-8 string; KDF input is raw UTF-8 bytes.
 
-### WrapKey
+### ProtectPrivateKey
 
 1. Generate random `salt` (16 bytes).
 2. Derive wrapping key:
 - `wrappingKey = PBKDF2_HMAC_SHA256(password, salt, 600000, 32)`
 3. Generate random `nonce` (12 bytes).
-4. Encrypt with AES-256-GCM and empty AAD:
+4. Seal with AES-256-GCM and empty AAD:
 - `ciphertextWithTag = AES_GCM_Seal(wrappingKey, nonce, sourceKeyBytes, aad=nil)`
 5. Build payload:
 - `payload = nonce || ciphertextWithTag`
@@ -156,7 +156,7 @@ Steps:
 - `wrappedKeyB64 = BASE64URL_NOPAD(payload)`
 - `saltB64 = BASE64URL_NOPAD(salt)`
 
-### UnwrapKey
+### UnprotectPrivateKey
 
 1. Decode:
 - `payload = BASE64URL_NOPAD_DECODE(wrappedKeyB64)`
@@ -168,7 +168,7 @@ Steps:
 4. Split payload:
 - `nonce = payload[0:12]`
 - `ciphertextWithTag = payload[12:]`
-5. Decrypt using AES-256-GCM with empty AAD.
+5. Open using AES-256-GCM with empty AAD.
 6. Return UTF-8 string from plaintext bytes.
 
 ## Interoperability notes

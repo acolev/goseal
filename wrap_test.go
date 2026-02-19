@@ -5,43 +5,43 @@ import (
 	"testing"
 )
 
-func TestWrapUnwrapKeyRoundTrip(t *testing.T) {
+func TestProtectUnprotectPrivateKeyRoundTrip(t *testing.T) {
 	const (
 		sourceKey = "my-master-key-123"
 		password  = "very-strong-password"
 	)
 
-	wrapped, salt, err := WrapKey(sourceKey, password)
+	wrapped, salt, err := ProtectPrivateKey(sourceKey, password)
 	if err != nil {
-		t.Fatalf("WrapKey: %v", err)
+		t.Fatalf("ProtectPrivateKey: %v", err)
 	}
 	if wrapped == "" || salt == "" {
 		t.Fatalf("expected wrapped key and salt to be non-empty")
 	}
 
-	got, err := UnwrapKey(wrapped, salt, password)
+	got, err := UnprotectPrivateKey(wrapped, salt, password)
 	if err != nil {
-		t.Fatalf("UnwrapKey: %v", err)
+		t.Fatalf("UnprotectPrivateKey: %v", err)
 	}
 	if got != sourceKey {
 		t.Fatalf("key mismatch: got=%q want=%q", got, sourceKey)
 	}
 }
 
-func TestUnwrapKeyWrongPasswordFails(t *testing.T) {
-	wrapped, salt, err := WrapKey("secret-key", "right-password")
+func TestUnprotectPrivateKeyWrongPasswordFails(t *testing.T) {
+	wrapped, salt, err := ProtectPrivateKey("secret-key", "right-password")
 	if err != nil {
-		t.Fatalf("WrapKey: %v", err)
+		t.Fatalf("ProtectPrivateKey: %v", err)
 	}
 
-	_, err = UnwrapKey(wrapped, salt, "wrong-password")
+	_, err = UnprotectPrivateKey(wrapped, salt, "wrong-password")
 	if !errors.Is(err, ErrKeyUnwrapFailed) {
 		t.Fatalf("expected ErrKeyUnwrapFailed, got %v", err)
 	}
 }
 
-func TestUnwrapKeyInvalidBase64Fails(t *testing.T) {
-	_, err := UnwrapKey("not-base64", "also-not-base64", "password")
+func TestUnprotectPrivateKeyInvalidBase64Fails(t *testing.T) {
+	_, err := UnprotectPrivateKey("not-base64", "also-not-base64", "password")
 	if !errors.Is(err, ErrInvalidRecord) {
 		t.Fatalf("expected ErrInvalidRecord, got %v", err)
 	}

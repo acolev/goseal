@@ -7,7 +7,7 @@
 1. Random DEK encrypts payload with ChaCha20-Poly1305.
 2. DEK is wrapped for target device public key via ephemeral X25519 + HKDF + ChaCha20-Poly1305.
 
-It also supports password-based key wrapping via PBKDF2(SHA-256) + AES-GCM (`WrapKey`/`UnwrapKey`).
+It also supports password-based key wrapping via PBKDF2(SHA-256) + AES-GCM (`ProtectPrivateKey`/`UnprotectPrivateKey`).
 
 Specification for cross-language implementations:
 - [goseal Specification](./SPECIFICATION.md)
@@ -36,12 +36,12 @@ func main() {
 	}
 
 	aad := []byte("user:42|record:100")
-	rec, err := goseal.Encrypt(kp.Pub, []byte("secret payload"), aad)
+	rec, err := goseal.Seal(kp.Pub, []byte("secret payload"), aad)
 	if err != nil {
 		panic(err)
 	}
 
-	plain, err := goseal.Decrypt(kp.Priv, rec, aad)
+	plain, err := goseal.Open(kp.Priv, rec, aad)
 	if err != nil {
 		panic(err)
 	}
@@ -62,12 +62,12 @@ import (
 )
 
 func main() {
-	wrapped, salt, err := goseal.WrapKey("device-dek", "correct horse battery staple")
+	wrapped, salt, err := goseal.ProtectPrivateKey("device-dek", "correct horse battery staple")
 	if err != nil {
 		panic(err)
 	}
 
-	unwrapped, err := goseal.UnwrapKey(wrapped, salt, "correct horse battery staple")
+	unwrapped, err := goseal.UnprotectPrivateKey(wrapped, salt, "correct horse battery staple")
 	if err != nil {
 		panic(err)
 	}
@@ -87,7 +87,7 @@ func main() {
 - Always use high-entropy device private keys and protect them at rest.
 - Always set meaningful `aad` (for example, `tenant|user|record`) to bind ciphertext to context.
 - Reject decryption on any integrity failure and do not retry with relaxed validation.
-- For `WrapKey`/`UnwrapKey`, use strong passwords and store returned salt alongside wrapped key.
+- For `ProtectPrivateKey`/`UnprotectPrivateKey`, use strong passwords and store returned salt alongside wrapped key.
 
 ## Security disclaimer
 
@@ -106,11 +106,7 @@ who already has both ciphertext and the required keys.
 
 ## License
 
-This project uses a non-commercial license:
-- use and modification for personal/non-commercial purposes are allowed;
-- selling or commercial use is prohibited.
-
-See [LICENSE](./LICENSE) for full terms.
+Licensed under [Apache License 2.0](./LICENSE).
 
 ## Development
 
@@ -118,5 +114,5 @@ See [LICENSE](./LICENSE) for full terms.
 go test ./...
 go test -race ./...
 go vet ./...
-go test -run=^$ -fuzz=FuzzEncryptDecryptRoundTrip -fuzztime=5s ./...
+go test -run=^$ -fuzz=FuzzSealOpenRoundTrip -fuzztime=5s ./...
 ```

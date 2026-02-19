@@ -8,9 +8,9 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-// Encrypt encrypts plaintext and wraps DEK for devicePub.
+// Seal encrypts plaintext and wraps DEK for devicePub.
 // aad optionally binds ciphertext to external context.
-func Encrypt(devicePub [keySize]byte, plaintext []byte, aad []byte) (*Record, error) {
+func Seal(devicePub [keySize]byte, plaintext []byte, aad []byte) (*Record, error) {
 	dek := make([]byte, keySize)
 	if _, err := randRead(dek); err != nil {
 		return nil, err
@@ -64,8 +64,8 @@ func Encrypt(devicePub [keySize]byte, plaintext []byte, aad []byte) (*Record, er
 	}, nil
 }
 
-// Decrypt unwraps DEK with devicePriv and decrypts payload.
-func Decrypt(devicePriv [keySize]byte, rec *Record, aad []byte) ([]byte, error) {
+// Open unwraps DEK with devicePriv and decrypts payload.
+func Open(devicePriv [keySize]byte, rec *Record, aad []byte) ([]byte, error) {
 	if rec == nil {
 		return nil, fmt.Errorf("%w: nil record", ErrInvalidRecord)
 	}
