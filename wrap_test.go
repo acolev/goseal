@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestProtectUnprotectPrivateKeyRoundTrip(t *testing.T) {
+func TestLockUnlockPrivateKeyRoundTrip(t *testing.T) {
 	const (
 		sourceKey = "my-master-key-123"
 		password  = "very-strong-password"
@@ -28,7 +28,7 @@ func TestProtectUnprotectPrivateKeyRoundTrip(t *testing.T) {
 	}
 }
 
-func TestUnprotectPrivateKeyWrongPasswordFails(t *testing.T) {
+func TestUnlockPrivateKeyWrongPasswordFails(t *testing.T) {
 	wrapped, salt, err := LockPrivateKey("secret-key", "right-password")
 	if err != nil {
 		t.Fatalf("LockPrivateKey: %v", err)
@@ -40,7 +40,7 @@ func TestUnprotectPrivateKeyWrongPasswordFails(t *testing.T) {
 	}
 }
 
-func TestUnprotectPrivateKeyInvalidBase64Fails(t *testing.T) {
+func TestUnlockPrivateKeyInvalidBase64Fails(t *testing.T) {
 	_, err := UnlockPrivateKey("not-base64", "also-not-base64", "password")
 	if !errors.Is(err, ErrInvalidRecord) {
 		t.Fatalf("expected ErrInvalidRecord, got %v", err)
