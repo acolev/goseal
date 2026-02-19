@@ -104,6 +104,14 @@ when private keys remain secret.
 It does **not** protect against compromise of private keys or passwords, or against an attacker
 who already has both ciphertext and the required keys.
 
+## License
+
+This project uses a non-commercial license:
+- use and modification for personal/non-commercial purposes are allowed;
+- selling or commercial use is prohibited.
+
+See [LICENSE](./LICENSE) for full terms.
+
 ## Development
 
 ```bash
