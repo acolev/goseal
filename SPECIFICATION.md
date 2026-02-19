@@ -1,89 +1,195 @@
-# goseal Password-Based Key Wrapping Specification
+# goseal Specification
 
-This document defines an interoperability specification for:
+This document defines cross-language interoperability requirements for `goseal`.
+
+Covered APIs:
+- `GenerateKeyPair()`
+- `Encrypt(devicePub, plaintext, aad)`
+- `Decrypt(devicePriv, record, aad)`
 - `WrapKey(sourceKey, password)`
 - `UnwrapKey(wrappedKeyB64, saltB64, password)`
 
-The goal is that different language implementations produce compatible results.
+## Versioning
 
-## Version
+- Record format version: `v=1`
+- Envelope scheme identifier: `goseal-envelope-v1`
+- Password-wrap scheme identifier: `goseal-wrap-v1`
 
-- Spec version: `wrap-v1`
+## Common encoding rules
 
-## Algorithms and parameters
+- Binary data in serialized records is encoded as URL-safe base64 without padding (RFC 4648 raw URL encoding).
+- Strings are UTF-8.
+- Random bytes must come from a cryptographically secure RNG.
 
-- KDF: `PBKDF2-HMAC-SHA256`
+## Constants
+
+- X25519 scalar/public key length: `32` bytes
+- DEK length: `32` bytes
+- ChaCha20-Poly1305 nonce length: `12` bytes
+- ChaCha20-Poly1305 tag length: `16` bytes
+- HKDF hash: `SHA-256`
+- HKDF info label prefix: `"goseal v1 kek"`
+
+Password-wrap constants:
+- PBKDF2 hash: `SHA-256`
 - PBKDF2 iterations: `600000`
-- Derived key length: `32` bytes
-- Salt length: `16` bytes (random)
-- AEAD: `AES-256-GCM`
-- Nonce length: `12` bytes (random)
-- AAD: empty / not used
-- Tag length: `16` bytes (default GCM tag size)
-- Base64 encoding: URL-safe base64 without padding (RFC 4648 raw URL encoding)
+- PBKDF2 derived key length: `32` bytes
+- PBKDF2 salt length (generated): `16` bytes
+- AES-GCM nonce length: `12` bytes
+- AES-GCM tag length: `16` bytes
 
-## Input encoding
+## Key generation (`GenerateKeyPair`)
 
-- `sourceKey` is a UTF-8 string.
-- `password` is a UTF-8 string.
-- KDF input bytes are the raw UTF-8 bytes of `password`.
-- Plaintext bytes are the raw UTF-8 bytes of `sourceKey`.
+1. Generate random 32-byte private scalar.
+2. Clamp scalar using X25519 clamping:
+- `s[0] &= 248`
+- `s[31] &= 127`
+- `s[31] |= 64`
+3. Compute public key:
+- `pub = X25519(priv, basepoint)`
+4. Return `{priv, pub}`.
 
-## WrapKey output format
+## Envelope record format (`Encrypt` output)
 
-`WrapKey` returns two strings:
+JSON object fields:
+- `v` (int): record version, must be `1`
+- `epk` (string): base64url of 32-byte ephemeral X25519 public key
+- `ndek` (string): base64url of 12-byte nonce for wrapped DEK encryption
+- `wdek` (string): base64url of wrapped DEK ciphertext+tag (variable length)
+- `ndata` (string): base64url of 12-byte nonce for payload encryption
+- `ct` (string): base64url of payload ciphertext+tag (variable length)
 
-1. `saltB64`
-- `salt = random(16 bytes)`
+Example shape:
+
+```json
+{
+  "v": 1,
+  "epk": "...",
+  "ndek": "...",
+  "wdek": "...",
+  "ndata": "...",
+  "ct": "..."
+}
+```
+
+## Encrypt algorithm (`Encrypt`)
+
+Inputs:
+- `devicePub`: recipient X25519 public key (32 bytes)
+- `plaintext`: bytes
+- `aad`: bytes (optional, may be empty)
+
+Steps:
+1. Generate random `dek` (32 bytes).
+2. Encrypt payload:
+- `aeadData = ChaCha20Poly1305(dek)`
+- `nonceData = random(12)`
+- `ct = AEAD_Seal(aeadData, nonceData, plaintext, aad)`
+3. Generate ephemeral keypair:
+- random+clamp 32-byte `epriv`
+- `epk = X25519(epriv, basepoint)`
+4. Compute ECDH shared secret:
+- `shared = X25519(epriv, devicePub)`
+- reject if `shared` is all-zero bytes
+5. Derive KEK with HKDF-SHA256:
+- `salt = epk || devicePub`
+- `info = "goseal v1 kek"` if `aad` empty
+- `info = "goseal v1 kek" || "|" || aad` if `aad` non-empty
+- `kek = HKDF_SHA256(ikm=shared, salt=salt, info=info, len=32)`
+6. Wrap DEK:
+- `aeadKEK = ChaCha20Poly1305(kek)`
+- `nonceDEK = random(12)`
+- `wdek = AEAD_Seal(aeadKEK, nonceDEK, dek, aad)`
+7. Serialize as record fields using base64url-no-padding.
+
+## Decrypt algorithm (`Decrypt`)
+
+Inputs:
+- `devicePriv`: recipient X25519 private scalar (32 bytes; implementation clamps before use)
+- `record`: JSON structure described above
+- `aad`: bytes (must match exactly what was used in `Encrypt`)
+
+Steps:
+1. Validate record:
+- record must be non-null
+- `v == 1`
+- decode/length-check fields:
+  - `epk` -> 32 bytes
+  - `ndek` -> 12 bytes
+  - `ndata` -> 12 bytes
+  - `wdek`, `ct` -> decoded bytes (length >= tag handled by AEAD/open path)
+2. Clamp `devicePriv` with X25519 clamping.
+3. Recompute `devicePub = X25519(devicePriv, basepoint)`.
+4. Compute shared secret:
+- `shared = X25519(devicePriv, epk)`
+- reject if all-zero
+5. Derive `kek` with the same HKDF construction:
+- `salt = epk || devicePub`
+- `info` construction exactly as in Encrypt, including AAD behavior
+6. Unwrap DEK:
+- `dek = AEAD_Open(ChaCha20Poly1305(kek), nonceDEK, wdek, aad)`
+- fail if authentication fails
+- require `len(dek) == 32`
+7. Decrypt payload:
+- `plaintext = AEAD_Open(ChaCha20Poly1305(dek), nonceData, ct, aad)`
+- fail if authentication fails
+8. Return plaintext bytes.
+
+## Password-based key wrapping (`WrapKey`/`UnwrapKey`)
+
+### Input encoding
+
+- `sourceKey` is UTF-8 string; plaintext bytes are raw UTF-8 bytes.
+- `password` is UTF-8 string; KDF input is raw UTF-8 bytes.
+
+### WrapKey
+
+1. Generate random `salt` (16 bytes).
+2. Derive wrapping key:
+- `wrappingKey = PBKDF2_HMAC_SHA256(password, salt, 600000, 32)`
+3. Generate random `nonce` (12 bytes).
+4. Encrypt with AES-256-GCM and empty AAD:
+- `ciphertextWithTag = AES_GCM_Seal(wrappingKey, nonce, sourceKeyBytes, aad=nil)`
+5. Build payload:
+- `payload = nonce || ciphertextWithTag`
+6. Return:
+- `wrappedKeyB64 = BASE64URL_NOPAD(payload)`
 - `saltB64 = BASE64URL_NOPAD(salt)`
 
-2. `wrappedKeyB64`
-- Derive `wrappingKey`:
-  - `wrappingKey = PBKDF2_HMAC_SHA256(password_bytes, salt, 600000, 32)`
-- Generate `nonce = random(12 bytes)`
-- Encrypt:
-  - `ciphertextWithTag = AES_256_GCM_Seal(key=wrappingKey, nonce=nonce, plaintext=sourceKey_bytes, aad=nil)`
-- Concatenate:
-  - `payload = nonce || ciphertextWithTag`
-- Encode:
-  - `wrappedKeyB64 = BASE64URL_NOPAD(payload)`
-
-## UnwrapKey process
-
-Given `wrappedKeyB64`, `saltB64`, and `password`:
+### UnwrapKey
 
 1. Decode:
-- `salt = BASE64URL_NOPAD_DECODE(saltB64)`
 - `payload = BASE64URL_NOPAD_DECODE(wrappedKeyB64)`
-
-2. Validate minimal lengths:
-- `len(salt) >= 8` (current implementation emits exactly 16)
-- `len(payload) >= 12 + 16` (nonce + minimum GCM tag)
-
-3. Derive key:
-- `wrappingKey = PBKDF2_HMAC_SHA256(password_bytes, salt, 600000, 32)`
-
+- `salt = BASE64URL_NOPAD_DECODE(saltB64)`
+2. Validate minimum lengths:
+- `len(payload) >= 12 + 16`
+- `len(salt) >= 8` (generated salt is 16)
+3. Derive wrapping key using same PBKDF2 params.
 4. Split payload:
 - `nonce = payload[0:12]`
 - `ciphertextWithTag = payload[12:]`
+5. Decrypt using AES-256-GCM with empty AAD.
+6. Return UTF-8 string from plaintext bytes.
 
-5. Decrypt:
-- `plaintext = AES_256_GCM_Open(key=wrappingKey, nonce=nonce, ciphertextWithTag, aad=nil)`
-- On authentication failure, return unwrap/decrypt error.
+## Interoperability notes
 
-6. Output:
-- Return UTF-8 string from `plaintext` bytes.
+- For envelope records, AAD bytes must match exactly between encrypt/decrypt; any mismatch must fail authentication.
+- Base64 variant must be raw URL-safe without `=` padding.
+- X25519 clamping behavior must match exactly.
+- Reject all-zero X25519 shared secrets.
 
-## Error behavior (recommended)
+## Error mapping guidance
 
-- Invalid/empty inputs -> invalid key/input error.
-- Base64 decode failure -> invalid record/format error.
-- Auth tag mismatch or wrong password -> unwrap/decrypt failed error.
-- Random source failure -> random source error.
+Recommended categories (names may differ by language):
+- Invalid key/input
+- Invalid record/format
+- Random source failure
+- Key unwrap/authentication failure
+- Data decrypt/authentication failure
 
-## Security notes
+Do not expose sensitive internals in production error messages.
 
-- Use a cryptographically secure RNG for salt and nonce.
-- Never reuse a nonce with the same derived key.
-- Store `saltB64` alongside `wrappedKeyB64`; both are needed for unwrapping.
-- Use strong passwords; PBKDF2 slows guessing but does not replace password entropy.
+## Security disclaimer
+
+This project is provided as-is, without warranties. Cryptography can be misused.
+Each integrator is responsible for code review, threat-model fit, and safe deployment.

@@ -1,5 +1,7 @@
 # goseal
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/acolev/goseal)](https://goreportcard.com/report/github.com/acolev/goseal)
+
 `goseal` is a Go library for device-bound envelope encryption:
 
 1. Random DEK encrypts payload with ChaCha20-Poly1305.
@@ -8,7 +10,7 @@
 It also supports password-based key wrapping via PBKDF2(SHA-256) + AES-GCM (`WrapKey`/`UnwrapKey`).
 
 Specification for cross-language implementations:
-- [Password-Based Key Wrapping Specification](./SPECIFICATION.md)
+- [goseal Specification](./SPECIFICATION.md)
 
 ## Install
 
