@@ -7,6 +7,9 @@
 
 It also supports password-based key wrapping via PBKDF2(SHA-256) + AES-GCM (`WrapKey`/`UnwrapKey`).
 
+Specification for cross-language implementations:
+- [Password-Based Key Wrapping Specification](./SPECIFICATION.md)
+
 ## Install
 
 ```bash
@@ -41,7 +44,7 @@ func main() {
 		panic(err)
 	}
 
-fmt.Println(string(plain))
+	fmt.Println(string(plain))
 }
 ```
 
