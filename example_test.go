@@ -26,13 +26,13 @@ func ExampleSeal() {
 	// Output: top secret
 }
 
-func ExampleProtectPrivateKey() {
-	wrapped, salt, err := goseal.ProtectPrivateKey("device-dek", "correct horse battery staple")
+func ExampleLockPrivateKey() {
+	wrapped, salt, err := goseal.LockPrivateKey("device-dek", "correct horse battery staple")
 	if err != nil {
 		panic(err)
 	}
 
-	unwrapped, err := goseal.UnprotectPrivateKey(wrapped, salt, "correct horse battery staple")
+	unwrapped, err := goseal.UnlockPrivateKey(wrapped, salt, "correct horse battery staple")
 	if err != nil {
 		panic(err)
 	}

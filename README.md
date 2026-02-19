@@ -7,7 +7,7 @@
 1. Random DEK encrypts payload with ChaCha20-Poly1305.
 2. DEK is wrapped for target device public key via ephemeral X25519 + HKDF + ChaCha20-Poly1305.
 
-It also supports password-based key wrapping via PBKDF2(SHA-256) + AES-GCM (`ProtectPrivateKey`/`UnprotectPrivateKey`).
+It also supports password-based key wrapping via PBKDF2(SHA-256) + AES-GCM (`LockPrivateKey`/`UnlockPrivateKey`).
 
 Specification for cross-language implementations:
 - [goseal Specification](./SPECIFICATION.md)
@@ -62,12 +62,12 @@ import (
 )
 
 func main() {
-	wrapped, salt, err := goseal.ProtectPrivateKey("device-dek", "correct horse battery staple")
+	wrapped, salt, err := goseal.LockPrivateKey("device-dek", "correct horse battery staple")
 	if err != nil {
 		panic(err)
 	}
 
-	unwrapped, err := goseal.UnprotectPrivateKey(wrapped, salt, "correct horse battery staple")
+	unwrapped, err := goseal.UnlockPrivateKey(wrapped, salt, "correct horse battery staple")
 	if err != nil {
 		panic(err)
 	}
@@ -87,7 +87,7 @@ func main() {
 - Always use high-entropy device private keys and protect them at rest.
 - Always set meaningful `aad` (for example, `tenant|user|record`) to bind ciphertext to context.
 - Reject decryption on any integrity failure and do not retry with relaxed validation.
-- For `ProtectPrivateKey`/`UnprotectPrivateKey`, use strong passwords and store returned salt alongside wrapped key.
+- For `LockPrivateKey`/`UnlockPrivateKey`, use strong passwords and store returned salt alongside wrapped key.
 
 ## Security disclaimer
 

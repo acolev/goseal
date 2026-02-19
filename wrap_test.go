@@ -11,17 +11,17 @@ func TestProtectUnprotectPrivateKeyRoundTrip(t *testing.T) {
 		password  = "very-strong-password"
 	)
 
-	wrapped, salt, err := ProtectPrivateKey(sourceKey, password)
+	wrapped, salt, err := LockPrivateKey(sourceKey, password)
 	if err != nil {
-		t.Fatalf("ProtectPrivateKey: %v", err)
+		t.Fatalf("LockPrivateKey: %v", err)
 	}
 	if wrapped == "" || salt == "" {
 		t.Fatalf("expected wrapped key and salt to be non-empty")
 	}
 
-	got, err := UnprotectPrivateKey(wrapped, salt, password)
+	got, err := UnlockPrivateKey(wrapped, salt, password)
 	if err != nil {
-		t.Fatalf("UnprotectPrivateKey: %v", err)
+		t.Fatalf("UnlockPrivateKey: %v", err)
 	}
 	if got != sourceKey {
 		t.Fatalf("key mismatch: got=%q want=%q", got, sourceKey)
@@ -29,19 +29,19 @@ func TestProtectUnprotectPrivateKeyRoundTrip(t *testing.T) {
 }
 
 func TestUnprotectPrivateKeyWrongPasswordFails(t *testing.T) {
-	wrapped, salt, err := ProtectPrivateKey("secret-key", "right-password")
+	wrapped, salt, err := LockPrivateKey("secret-key", "right-password")
 	if err != nil {
-		t.Fatalf("ProtectPrivateKey: %v", err)
+		t.Fatalf("LockPrivateKey: %v", err)
 	}
 
-	_, err = UnprotectPrivateKey(wrapped, salt, "wrong-password")
+	_, err = UnlockPrivateKey(wrapped, salt, "wrong-password")
 	if !errors.Is(err, ErrKeyUnwrapFailed) {
 		t.Fatalf("expected ErrKeyUnwrapFailed, got %v", err)
 	}
 }
 
 func TestUnprotectPrivateKeyInvalidBase64Fails(t *testing.T) {
-	_, err := UnprotectPrivateKey("not-base64", "also-not-base64", "password")
+	_, err := UnlockPrivateKey("not-base64", "also-not-base64", "password")
 	if !errors.Is(err, ErrInvalidRecord) {
 		t.Fatalf("expected ErrInvalidRecord, got %v", err)
 	}

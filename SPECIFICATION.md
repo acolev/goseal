@@ -6,8 +6,8 @@ Covered APIs:
 - `GenerateKeyPair()`
 - `Seal(devicePub, plaintext, aad)`
 - `Open(devicePriv, record, aad)`
-- `ProtectPrivateKey(sourceKey, password)`
-- `UnprotectPrivateKey(wrappedKeyB64, saltB64, password)`
+- `LockPrivateKey(sourceKey, password)`
+- `UnlockPrivateKey(wrappedKeyB64, saltB64, password)`
 
 ## Versioning
 
@@ -135,14 +135,14 @@ Steps:
 - fail if authentication fails
 8. Return plaintext bytes.
 
-## Password-based key wrapping (`ProtectPrivateKey`/`UnprotectPrivateKey`)
+## Password-based key wrapping (`LockPrivateKey`/`UnlockPrivateKey`)
 
 ### Input encoding
 
 - `sourceKey` is UTF-8 string; plaintext bytes are raw UTF-8 bytes.
 - `password` is UTF-8 string; KDF input is raw UTF-8 bytes.
 
-### ProtectPrivateKey
+### LockPrivateKey
 
 1. Generate random `salt` (16 bytes).
 2. Derive wrapping key:
@@ -156,7 +156,7 @@ Steps:
 - `wrappedKeyB64 = BASE64URL_NOPAD(payload)`
 - `saltB64 = BASE64URL_NOPAD(salt)`
 
-### UnprotectPrivateKey
+### UnlockPrivateKey
 
 1. Decode:
 - `payload = BASE64URL_NOPAD_DECODE(wrappedKeyB64)`

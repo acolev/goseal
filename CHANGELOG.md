@@ -6,8 +6,8 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Renamed `Encrypt` to `Seal`.
 - Renamed `Decrypt` to `Open`.
-- Renamed `WrapKey` to `ProtectPrivateKey`.
-- Renamed `UnwrapKey` to `UnprotectPrivateKey`.
+- Renamed `WrapKey` to `LockPrivateKey`.
+- Renamed `UnwrapKey` to `UnlockPrivateKey`.
 - Updated tests, examples, README, and specification to use the new API names.
 
 ## [0.1.6] - 2026-02-18

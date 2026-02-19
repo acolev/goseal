@@ -10,12 +10,12 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 )
 
-// ProtectPrivateKey encrypts sourceKey using a password-derived key.
+// LockPrivateKey encrypts sourceKey using a password-derived key.
 //
 // It returns:
 // - wrappedKeyB64: base64(nonce || ciphertext || tag)
 // - saltB64: base64(random salt used for PBKDF2)
-func ProtectPrivateKey(sourceKey string, password string) (wrappedKeyB64 string, saltB64 string, err error) {
+func LockPrivateKey(sourceKey string, password string) (wrappedKeyB64 string, saltB64 string, err error) {
 	if sourceKey == "" || password == "" {
 		return "", "", ErrInvalidKey
 	}
@@ -48,8 +48,8 @@ func ProtectPrivateKey(sourceKey string, password string) (wrappedKeyB64 string,
 	return b64(out), b64(salt), nil
 }
 
-// UnprotectPrivateKey decrypts base64-encoded wrappedKeyB64 using password and saltB64.
-func UnprotectPrivateKey(wrappedKeyB64 string, saltB64 string, password string) (string, error) {
+// UnlockPrivateKey decrypts base64-encoded wrappedKeyB64 using password and saltB64.
+func UnlockPrivateKey(wrappedKeyB64 string, saltB64 string, password string) (string, error) {
 	if wrappedKeyB64 == "" || saltB64 == "" || password == "" {
 		return "", ErrInvalidKey
 	}
